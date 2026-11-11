@@ -66,19 +66,28 @@ public:
 		NONCOPYABLE(TreeItem);
 		MOVABLE(TreeItem);
 
+		static constexpr uint32_t NoLink = static_cast<uint32_t>(-1);
+
 		string strName;
-		std::vector<int> Last;
+		// Nearest earlier row that visually contains this one. Not the path parent:
+		// a name like Windows.old can sit between Windows and Windows\System32.
+		uint32_t VisualParent;
+		// 1 when the old Last[Depth - 1] flag was set: this row is the last one
+		// of its depth inside the run the original scan treated as its subtree.
+		uint8_t IsLast;
 		size_t Depth;
 
 		TreeItem():
-			Last(MAX_PATH/2),
+			VisualParent(NoLink),
+			IsLast(0),
 			Depth(0)
 		{
 		}
 
 		explicit TreeItem(string Name):
 			strName(std::move(Name)),
-			Last(MAX_PATH/2),
+			VisualParent(NoLink),
+			IsLast(0),
 			Depth(0)
 		{
 		}

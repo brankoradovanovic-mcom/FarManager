@@ -497,12 +497,23 @@ void TreeList::DisplayTree(bool Fast)
 			{
 				string strOutStr;
 
-				for (size_t i = 0; i < CurPtr.Depth - 1 && WhereX() + 3 * i < m_Where.right - 6u; ++i)
+				// Same bits the old per-node Last vector stored. A level nobody wrote
+				// stays 0, and 0 draws a vertical bar.
+				std::vector<uint8_t> Last(CurPtr.Depth);
+				for (auto Index = static_cast<uint32_t>(J); Index != TreeItem::NoLink; Index = m_ListData[Index].VisualParent)
 				{
-					strOutStr+=TreeLineSymbol[CurPtr.Last[i]?0:1];
+					const auto Depth = m_ListData[Index].Depth;
+					if (!Depth || Depth > Last.size())
+						continue;
+					Last[Depth - 1] = m_ListData[Index].IsLast;
 				}
 
-				strOutStr+=TreeLineSymbol[CurPtr.Last[CurPtr.Depth-1]?2:3];
+				for (size_t i = 0; i < CurPtr.Depth - 1 && WhereX() + 3 * i < m_Where.right - 6u; ++i)
+				{
+					strOutStr += TreeLineSymbol[Last[i]? 0 : 1];
+				}
+
+				strOutStr += TreeLineSymbol[Last[CurPtr.Depth - 1]? 2 : 3];
 				Text(strOutStr);
 
 				const auto pos = FindLastSlash(CurPtr.strName);
@@ -931,46 +942,65 @@ bool TreeList::FillLastData()
 		return static_cast<size_t>(std::count_if(Str.cbegin() + Offset, Str.cend(), path::is_separator));
 	};
 
-	const auto RootLength = m_Root.empty()? 0 : m_Root.size()-1;
-	const auto Range = m_ListData | std::views::drop(1);
-	FOR_RANGE(Range, i)
-	{
-		const auto Pos = i->strName.rfind(path::separator);
-		const auto PathLength = Pos != string::npos? static_cast<int>(Pos) + 1 : 0;
-		const auto Depth = i->Depth = CountSlash(i->strName, RootLength);
+	if (m_ListData.empty())
+		return true;
 
-		if (!Depth)
+	const auto RootLength = m_Root.empty()? 0 : m_Root.size() - 1;
+
+	// One forward pass over the same rule as the old nested scan:
+	// a row owns every following row of greater depth, until the first row
+	// that is not deeper. That closer decides IsLast, by whether it still
+	// lies in this row's parent directory. Path parents are the wrong source:
+	// Windows.old sorts between Windows and Windows\System32, and the lines
+	// follow that order.
+	struct Frame
+	{
+		uint32_t Index;
+		size_t Depth;
+	};
+
+	std::vector<Frame> Stack;
+	Stack.reserve(64);
+
+	const auto Close = [&](Frame const& Open, size_t const Next)
+	{
+		auto Last = 1;
+		if (Next < m_ListData.size())
+		{
+			const auto& Name = m_ListData[Open.Index].strName;
+			const auto Pos = Name.rfind(path::separator);
+			const auto Prefix = string_view(Name).substr(0, Pos == string::npos? 0 : Pos + 1);
+			if (starts_with_icase(m_ListData[Next].strName, Prefix))
+				Last = 0;
+		}
+		m_ListData[Open.Index].IsLast = static_cast<uint8_t>(Last);
+	};
+
+	for (size_t I = 0; I != m_ListData.size(); ++I)
+	{
+		auto& Item = m_ListData[I];
+		const auto Depth = I? CountSlash(Item.strName, RootLength) : 0;
+		Item.Depth = Depth;
+
+		if (I && !Depth)
 			return false;
 
-		auto SubDirPos = i;
-		int Last = 1;
-
-		const std::ranges::subrange SubRange(i + 1, Range.end());
-		FOR_RANGE(SubRange, j)
+		while (!Stack.empty() && Stack.back().Depth >= Depth)
 		{
-			if (CountSlash(j->strName, RootLength) > Depth)
-			{
-				SubDirPos = j;
-				continue;
-			}
-			else
-			{
-				if (starts_with_icase(j->strName, string_view(i->strName).substr(0, PathLength)))
-					Last=0;
-				break;
-			}
+			Close(Stack.back(), I);
+			Stack.pop_back();
 		}
 
-		for (auto& j: std::ranges::subrange(i, SubDirPos + 1))
-		{
-			if (Depth > j.Last.size())
-			{
-				j.Last.resize(j.Last.size() + MAX_PATH, 0);
-			}
-
-			j.Last[Depth - 1] = Last;
-		}
+		Item.VisualParent = Stack.empty()? TreeItem::NoLink : Stack.back().Index;
+		Stack.push_back({static_cast<uint32_t>(I), Depth});
 	}
+
+	while (!Stack.empty())
+	{
+		Close(Stack.back(), m_ListData.size());
+		Stack.pop_back();
+	}
+
 	return true;
 }
 
