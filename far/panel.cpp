@@ -202,7 +202,9 @@ bool Panel::ProcessMouseDrag(const MOUSE_EVENT_RECORD *MouseEvent)
 		}
 	}
 
-	if ((MouseEvent->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) && IsMouseButtonEvent(MouseEvent->dwEventFlags) && m_Where.width() - 1 < ScrX)
+	// Don't arm on DOUBLE_CLICK: open/assoc flushes the button-up (and focus often leaves the console),
+	// which leaves a ghost drag until a later mouse move.
+	if ((MouseEvent->dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) && MouseEvent->dwEventFlags == 0 && m_Where.width() - 1 < ScrX)
 	{
 		MoveToMouse(MouseEvent);
 		os::fs::find_data Data;

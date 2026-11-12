@@ -3280,6 +3280,7 @@ bool FileList::ProcessMouse(const MOUSE_EVENT_RECORD *MouseEvent)
 			if (m_PanelMode == panel_mode::PLUGIN_PANEL)
 			{
 				FlushInputBuffer(); // !!!
+				Panel::EndDrag();
 				INPUT_RECORD rec;
 				FarKeyToInputRecord({VK_RETURN, IntKeyState.ShiftPressed()? SHIFT_PRESSED : 0u}, &rec);
 				if (Global->CtrlObject->Plugins->ProcessKey(GetPluginHandle(), &rec, false))
@@ -3297,6 +3298,8 @@ bool FileList::ProcessMouse(const MOUSE_EVENT_RECORD *MouseEvent)
 			*/
 			ShowFileList();
 			FlushInputBuffer();
+			// Flushing drops the button-up that would EndDrag(); clear any drag armed by the click(s).
+			Panel::EndDrag();
 			ProcessEnter(true, IntKeyState.ShiftPressed(), true, IntKeyState.OnlyCtrlAltPressed(), OFP_NORMAL);
 			return true;
 		}

@@ -1604,6 +1604,7 @@ bool TreeList::ProcessMouse(const MOUSE_EVENT_RECORD *MouseEvent)
 				return true;
 			}
 
+			Panel::EndDrag();
 			ProcessEnter();
 			return true;
 		}
